@@ -1,122 +1,173 @@
 # CFU Playground
 
-Want a faster ML processor?   Do it yourself!
+### Setup CFU Playground
 
-This project provides a framework that an engineer, intern, or student can use to design and evaluate **enhancements** to an FPGA-based “soft” processor, specifically to increase the performance of machine learning (ML) tasks.   The goal is to abstract away most infrastructure details so that the user can get up to speed quickly and focus solely on adding new processor instructions, exploiting them in the computation, and measuring the results.
-
-This project enables rapid iteration on processor improvements -- multiple iterations per day.
-
-This is how it works:
-* Choose a TensorFlow Lite model; a quantized person detection model is provided, or bring your own.
-* Execute the inference on the Arty FPGA board to get cycle counts per layer.
-* Choose an TFLite operator to accelerate, and dig into that code.
-* Design new instruction(s) that can replace multiple basic operations.
-* Build a custom function unit (a small amount of hardware) that performs the new instruction(s).
-* Modify the TFLite/Micro library kernel to use the new instruction(s), which are available as intrinsics with function call syntax.
-* Rebuild the FPGA Soc, recompile the TFLM library, and rerun to measure improvement.
-
-The focus here is performance, not demos.  The inputs to the ML inference are canned/faked, and the only output is cycle counts.  It would be possible to export the improvements made here to an actual demo, but currently no pathway is set up for doing so.
-
-With the exception of Vivado, everything used by this project is open source.
-
-**Disclaimer: This is not an officially supported Google project.   Support and/or new releases may be limited.**
-
-_This is an early prototype of a ML exploration framework; expect a lack of documentation and occasional breakage. If you want to collaborate on building out this framework, reach out to tcal@google.com!   See "Contribution guidelines" below._
-
-
-### Required hardware/OS
-
-* One of the boards supported by [LiteX Boards](https://github.com/litex-hub/litex-boards/tree/master/litex_boards/targets). Most of LiteX Boards targets should work.\
-It has been tested on the **Arty A7-35T/100T**, **iCEBreaker**, **Fomu**, **OrangeCrab**, **ULX3S**, and **Nexys Video** boards.
-* The only supported host OS is Linux (Debian / Ubuntu).
-
-You don't need any board if you want to run [Renode](https://renode.io) or Verilator simulation.
-
-### Assumed software
-
-* FPGA Toolchain: that depends on a chosen board.  If you already have a toolchain installed for your board, you can use that.
-
-For a board with a Xilinx XC7 part, you can use either [Vivado](https://www.xilinx.com/support/download.html),
-which must be manually installed (here's our [guide](https://cfu-playground.readthedocs.io/en/latest/vivado-install.html)),
-or the open-source SymbiFlow tool chain, which can be easily installed using Conda
-(see the [Setup Guide](https://cfu-playground.readthedocs.io/en/latest/setup-guide.html)).
-
-For boards with Lattice iCE40, ECP5, or Nexus FPGAs, you can install the appropriate set of open source tools
-either via Conda (see the [Setup Guide](https://cfu-playground.readthedocs.io/en/latest/setup-guide.html))
-or on your own by building from source.   Or, you can use the Lattice toolchain (Radiant/Diamond).
-
-If you want to try things out using [Renode](https://renode.io) simulation, then you don't need either the board or toolchain.
-You can also perform Verilog-level cycle-accurate simulation with Verilator, but this is much slower.
-Renode is installed by the setup script.
-
-Other required packages will be checked for and, if on a Debian-based system, automatically installed by the setup script below.
-
-
-### Setup
-
-Clone this repo, `cd` into it, then get run:
+* I followed the CFU-Playground GitHub installation guide.
+* Amaranth was not installed.
+* I installed Vivado 2020.1.
+* Modified proj/proj.mk:
 ```sh
-scripts/setup
+export TARGET ?= digilent_nexys4ddr
+```
+* Also check "https://hackmd.io/@pei1005/B1QBvAaTn"
+
+### Make Your Project
+
+```sh
+cp -r proj/proj_template_v proj/my_first_cfu
+cd proj/my_first_cfu
 ```
 
-### Use with board
+### Measuring how much MAC and DRAM space of MNV2 model use.
 
-The default board is Arty. If you want to use different board you must specify target, e.g. `TARGET=digilent_nexys_video`.
-1. Build the SoC and load the bitstream onto Arty:
+* Modify CFU-Playground/common/src/tflite.cc
+
+* Add codes below:
+ 
 ```sh
-cd proj/proj_template
-make prog
+printf("DRAM: %d bytes\n", interpreter->arena_used_bytes());
 ```
 
-This builds the SoC with the default CFU from `proj/proj_template`. Later you'll copy this and modify it to make your own project.
+* in here:
 
-
-2. Build a RISC-V program and execute it on the SoC that you just loaded onto the Arty:
 ```sh
+printf("Input: %d bytes, %d dims:", input->bytes, dims->size);
+for (int ii = 0; ii < dims->size; ++ii) {
+    printf(" %d", dims->data[ii]);
+}
+puts("\n");
+printf("DRAM: %d bytes\n", interpreter->arena_used_bytes());
+tflite_postload();
+```
+
+### Measuring the cycles of multiply-and-accumulate(MAC) operation required for a model
+
+* We can use the functions in CFU-Playground/common/src/perf.h to count the cycles of MAC operations.
+
+1. Create files in CFU-Playground/common/src/models to record cycles.
+
+* create a file named: "my_cycles.cc"
+
+```sh
+long long unsigned my_cycles = 0;
+
+long long unsigned get_my_cycles(){
+    return my_cycles;
+}
+
+void reset_my_cycles(){
+    my_cycles = 0;
+}
+```
+
+* create a file named: my_cycles.h
+
+```sh
+long long unsigned get_my_cycles();
+void reset_my_cycles();
+```
+2. Inside your project folder run the following:
+
+```sh
+$ mkdir -p src/tensorflow/lite/kernels/internal/reference/integer_ops/
+$ cp \
+  ../../third_party/tflite-micro/tensorflow/lite/kernels/internal/reference/conv.h \
+  src/tensorflow/lite/kernels/internal/reference/conv.h
+```
+
+* This will create a copy of the convolution source code in your project directory. 
+* At build time your copy of the source code will replace the regular implementation.
+
+3. Modify conv.h
+* Open the newly created copy at proj/my_first_cfu/src/tensorflow/lite/kernels/ internal/reference/conv.h. 
+* Locate the innermost loop of the first function, 
+* add #include "perf.h" , #include "models/my_cycles.h" and extern long long unsigned my_cycles; at the top of the file and then surround the inner loop with perf functions to count how many cycles this inner loop takes.
+
+```sh
+#include "perf.h"
+#include "models/my_cycles.h"
+
+extern long long unsigned my_cycles;
+
+/* ... */
+unsigned my_start = perf_get_mcycle();
+for (int in_channel = 0; in_channel < filter_input_depth; ++in_channel) {
+  float input_value = input_data[Offset(
+      input_shape, batch, in_y, in_x, in_channel + group * filter_input_depth)];
+  float filter_value = filter_data[Offset(
+      filter_shape, out_channel, filter_y, filter_x, in_channel)];
+acc += (input_value * filter_value);
+}
+unsigned my_finish = perf_get_mcycle();
+my_cycles += (my_finish - my_start);
+```
+4. Modify CFU-Playground/common/src/models/mnv2/mnv2.cc .
+
+* Add #include "models/my_cycles.h" at the top of the file. 
+* Use the functions in models/my_cycles.h to print the total cycles of MAC operations.
+
+```sh
+#include "models/mnv2/mnv2.h"
+
+#include <stdio.h>
+
+#include "menu.h"
+#include "models/mnv2/input_00001_18027.h"
+#include "models/mnv2/input_00001_7281.h"
+#include "models/mnv2/input_00001_7425.h"
+#include "models/mnv2/input_00002_2532.h"
+#include "models/mnv2/input_00002_25869.h"
+#include "models/mnv2/input_00004_970.h"
+#include "models/mnv2/model_mobilenetv2_160_035.h"
+#include "tflite.h"
+#include "models/my_cycles.h"
+
+extern "C" {
+#include "fb_util.h"
+};
+```
+
+5. Run the project
+
+* You must make clean first. 
+* To enable performance counters you should use the command below.
+
+```sh
+make clean
+make prog EXTRA_LITEX_ARGS="--cpu-variant=perf+cfu"
 make load
 ```
-
-### Use without board
-
-If you don't have any board supported by LiteX Boards you can use Renode or Verilator to simulate it.
-
-To use Renode to execute on a simulator on the host machine (no Vivado or Arty board required), execute:
+* or, if you use Vivado and ARTY100T 
 
 ```sh
+make clean
+make prog TARGET=digilent_nexys4ddr USE_VIVADO=1 EXTRA_LITEX_ARGS="--cpu-variant=perf+cfu"
+make make load TARGET=digilent_nexys4ddr
+```
+----------------------------------------------------------------------------------------------
+# How TO Run Models
+----------------------------------------------------------------------------------------------
+### CFU with Renode
+----------------------------------------------------------------------------------------------
+```sh
+cd CFU-Playground
+cp -r proj/proj_template proj/"proj_name"
+cd proj/"proj_name"
+code Makefile
+#choose model which you want to use
 make renode
 ```
-
-To use Verilator to execute on a cycle-accurate RTL-level simulator (no Vivado or Arty board required), execute:
-
+----------------------------------------------------------------------------------------------
+### CFU with FPGA 
+----------------------------------------------------------------------------------------------
 ```sh
-make PLATFORM=sim load
+cd CFU-Playground
+cd proj/"proj_name"
+make clean
+make prog  USE_VIVADO=1
+make load 
+# nothing happens, type ENTER
+litex> reboot <- type this or push reset button on board
+# for exir panel: ctrl + alt +c //twice 
 ```
-
-### Most useful make flags
-
-| Option          | Explanation   | Example | Default |
-| --------------- | ------------- | ------- | ------- |
-| `PLATFORM`      | Choose which SoC platform you want to build: `hps` or `sim` or `common_soc` | `make bitstream PLATFORM=hps` | `common_soc` |
-| `TARGET`        | Choose one of many targets from [LiteX Boards](https://github.com/litex-hub/litex-boards/tree/master/litex_boards/targets) repository, `common_soc` will take `BaseSoC` from specified `target.py` | `make bitstream TARGET=nexys_video_board` | `digilent_arty` |
-| `USE_VIVADO`    | Use Vivado toolchain | `make bitstream USE_VIVADO=1` | `0` |
-| `USE_SYMBIFLOW` | Use Symbiflow toolchain | `make bitstream USE_SYMBIFLOW=1` | `0` |
-| `UART_SPEED`    | Choose UART baudrate | `make bitstream UART_SPEED=115200` | `3686400` |
-| `IGNORE_TIMING` | Ignore timing contraints (only for Vivado) | `make bitstream USE_VIVADO=1 IGNORE_TIMING=1` | `0` |
-
-### Underlying open-source technology
-
-* [LiteX](https://github.com/enjoy-digital/litex): Open-source framework for assembling the SoC (CPU + peripherals)
-* [VexRiscv](https://github.com/SpinalHDL/VexRiscv): Open-source RISC-V soft CPU optimized for FPGAs
-* [Amaranth](https://github.com/amaranth-lang/amaranth): Python toolbox for building digital hardware
-
-
-### Licensed under Apache-2.0 license
-
-See the file [LICENSE](LICENSE).
-
-### Contribution guidelines
-
-**If you want to contribute to CFU Playground, be sure to review the
-[contribution guidelines](CONTRIBUTING.md).  This project adheres to Google's
-[code of conduct](CODE_OF_CONDUCT.md).   By participating, you are expected to
-uphold this code.**
+-----------------------------------------------------------------------------------
