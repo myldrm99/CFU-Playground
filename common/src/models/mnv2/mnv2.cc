@@ -27,6 +27,7 @@
 #include "models/mnv2/input_00004_970.h"
 #include "models/mnv2/model_mobilenetv2_160_035.h"
 #include "tflite.h"
+#include "models/my_cycles.h"
 
 extern "C" {
 #include "fb_util.h"
