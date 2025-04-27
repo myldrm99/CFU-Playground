@@ -185,7 +185,7 @@ void tflite_load_model(const unsigned char* model_data,
     printf(" %d", dims->data[ii]);
   }
   puts("\n");
-  printf("DRAM: %d bytes\n", interpreter->arena_used_bytes());
+  // printf("DRAM: %d bytes\n", interpreter->arena_used_bytes()); // this is code for how much DRAM space of MNV2 model use.
   tflite_postload();
 }
 

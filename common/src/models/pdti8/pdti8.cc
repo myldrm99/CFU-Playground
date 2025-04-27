@@ -23,6 +23,7 @@
 #include "tensorflow/lite/micro/examples/person_detection/no_person_image_data.h"
 #include "tensorflow/lite/micro/examples/person_detection/person_image_data.h"
 #include "tflite.h"
+#include "models/my_cycles.h"
 
 extern "C" {
 #include "fb_util.h"

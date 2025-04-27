@@ -46,6 +46,9 @@
 # To run in simulation:
 # $ make load PLATFORM=sim
 
+#EXTRA_LITEX_ARGS="--cpu-variant=perf+cfu"
+#make PLATFORM=sim EXTRA_LITEX_ARGS='--cpu-variant=perf+cfu'
+
 export UART_SPEED ?= 1843200
 # Need a slower baudrate when communicating with Serv
 ifdef SERV

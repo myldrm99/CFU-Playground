@@ -27,7 +27,28 @@
 #include "models/mnv2/input_00004_970.h"
 #include "models/mnv2/model_mobilenetv2_160_035.h"
 #include "tflite.h"
-#include "models/my_cycles.h"
+// #include "models/my_cycles.h"
+// #include "perf.h"
+
+// void print_perf_counters() {
+//     printf("Counter |  Total Cycles | Starts | Average | Raw\n");
+//     printf("--------------------------------------------------\n");
+
+//     // Example: Measure cycles spent inside MAC operations
+//     long long unsigned start_cycles = perf_get_mcycle();  // Start tracking
+
+//     // Simulate an operation that gets counted (normally this is inside the inner loop)
+//     for (int i = 0; i < 8; i++) {
+//         long long unsigned total_cycles = perf_get_mcycle() - start_cycles;
+//         long long unsigned starts = (i == 0) ? 124418 : 0;  // Simulated starts
+//         long long unsigned avg = (starts > 0) ? (total_cycles / starts) : 0;
+        
+//         printf("    %d   |  %llu  |  %llu  |  %llu  |  %llu\n",
+//                i, total_cycles, starts, avg, total_cycles);
+//     }
+
+//     printf("\nTotal MAC operation cycles: %llu\n", get_my_cycles());
+// }
 
 extern "C" {
 #include "fb_util.h"
@@ -58,6 +79,22 @@ static int32_t mnv2_classify() {
   int8_t* output = tflite_get_output();
   return (int32_t)output[1] - (int32_t)output[0];
 }
+// static int32_t mnv2_classify() {
+//   printf("Running mnv2\n");
+//   // Reset cycle counter before running inference
+//   reset_my_cycles();
+
+//   tflite_classify();  // Run inference
+
+//   // Retrieve inference result
+//   int8_t* output = tflite_get_output();
+//   int32_t result = (int32_t)output[1] - (int32_t)output[0];
+
+//   // Print performance counters after classification
+//   print_perf_counters();
+
+//   return result;
+// }
 
 static void do_classify_zeros() {
   tflite_set_input_zeros();
